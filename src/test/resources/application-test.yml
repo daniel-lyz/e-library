@@ -1,0 +1,9 @@
+# Rate limiting is covered by its own test; elsewhere it would only make tests flaky.
+elibrary:
+  rate-limit:
+    enabled: false
+
+spring:
+  h2:
+    console:
+      enabled: false

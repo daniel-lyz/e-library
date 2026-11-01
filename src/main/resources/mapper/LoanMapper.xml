@@ -1,0 +1,56 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.LoanMapper">
+
+    <sql id="detailsColumns">
+        l.id, l.user_id, l.book_id, l.status, l.borrowed_at, l.due_at, l.returned_at,
+        b.format AS book_format, b.title AS book_title, b.author AS book_author, b.issue AS book_issue
+    </sql>
+
+    <!-- active_flag = 1 makes the row take part in uk_loan_active (one active loan per user and book) -->
+    <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
+        INSERT INTO loan (user_id, book_id, status, borrowed_at, due_at, active_flag)
+        VALUES (#{userId}, #{bookId}, #{status}, #{borrowedAt}, #{dueAt}, 1)
+    </insert>
+
+    <select id="existsActive" resultType="boolean">
+        SELECT EXISTS(SELECT 1 FROM loan WHERE user_id = #{userId} AND book_id = #{bookId} AND status = 'ACTIVE')
+    </select>
+
+    <!-- user_id in the WHERE clause is the ownership check; status makes the update idempotent -->
+    <update id="markReturned">
+        UPDATE loan
+        SET status      = 'RETURNED',
+            returned_at = #{now},
+            active_flag = NULL
+        WHERE id = #{loanId}
+          AND user_id = #{userId}
+          AND status = 'ACTIVE'
+    </update>
+
+    <select id="findByIdAndUser" resultType="com.example.elibrary.domain.Loan">
+        SELECT id, user_id, book_id, status, borrowed_at, due_at, returned_at
+        FROM loan
+        WHERE id = #{loanId}
+          AND user_id = #{userId}
+    </select>
+
+    <select id="findDetails" resultType="com.example.elibrary.mapper.LoanDetails">
+        SELECT <include refid="detailsColumns"/>
+        FROM loan l
+        JOIN book b ON b.id = l.book_id
+        WHERE l.id = #{loanId}
+          AND l.user_id = #{userId}
+    </select>
+
+    <!-- bounded by the max-active-loans rule, so no paging is needed -->
+    <select id="findActiveDetails" resultType="com.example.elibrary.mapper.LoanDetails">
+        SELECT <include refid="detailsColumns"/>
+        FROM loan l
+        JOIN book b ON b.id = l.book_id
+        WHERE l.user_id = #{userId}
+          AND l.status = 'ACTIVE'
+        ORDER BY l.due_at ASC, l.id ASC
+    </select>
+
+</mapper>

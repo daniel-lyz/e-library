@@ -1,0 +1,62 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd">
+<mapper namespace="com.example.elibrary.mapper.BookMapper">
+
+    <sql id="columns">
+        id, format, title, isbn, author, issn, issue, published_on, category, description,
+        total_copies, available_copies, status, created_at, updated_at
+    </sql>
+
+    <!-- browsing only lists books that are on the shelf; author is NULL for journals, so only the title matches -->
+    <sql id="searchFilter">
+        WHERE status = 'ON_SHELF'
+        <if test="keywordPattern != null">
+            AND (LOWER(title) LIKE #{keywordPattern} ESCAPE '!' OR LOWER(author) LIKE #{keywordPattern} ESCAPE '!')
+        </if>
+        <if test="format != null">
+            AND format = #{format}
+        </if>
+        <if test="category != null">
+            AND category = #{category}
+        </if>
+    </sql>
+
+    <select id="findById" resultType="com.example.elibrary.domain.Book">
+        SELECT <include refid="columns"/>
+        FROM book
+        WHERE id = #{id}
+    </select>
+
+    <select id="search" resultType="com.example.elibrary.domain.Book">
+        SELECT <include refid="columns"/>
+        FROM book
+        <include refid="searchFilter"/>
+        <!-- ${} is safe here: the value is a constant of the BookSort enum, never user text -->
+        ORDER BY ${sort.orderBy}
+        LIMIT #{limit} OFFSET #{offset}
+    </select>
+
+    <select id="count" resultType="long">
+        SELECT COUNT(*)
+        FROM book
+        <include refid="searchFilter"/>
+    </select>
+
+    <update id="decrementAvailable">
+        UPDATE book
+        SET available_copies = available_copies - 1,
+            updated_at       = #{now}
+        WHERE id = #{id}
+          AND status = 'ON_SHELF'
+          AND available_copies > 0
+    </update>
+
+    <update id="incrementAvailable">
+        UPDATE book
+        SET available_copies = available_copies + 1,
+            updated_at       = #{now}
+        WHERE id = #{id}
+          AND available_copies &lt; total_copies
+    </update>
+
+</mapper>

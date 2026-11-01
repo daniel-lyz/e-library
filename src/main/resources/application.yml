@@ -1,0 +1,73 @@
+server:
+  port: ${SERVER_PORT:8080}
+  shutdown: graceful
+
+spring:
+  application:
+    name: e-library
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+
+  # Default: in-memory H2 in MySQL mode, so the service starts with zero setup.
+  # LOCK_TIMEOUT is raised so concurrent borrowers queue on the row lock instead of failing fast.
+  # Any other database is configured through SPRING_DATASOURCE_URL / _USERNAME / _PASSWORD (see README).
+  datasource:
+    url: jdbc:h2:mem:elibrary;MODE=MySQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1;LOCK_TIMEOUT=10000
+    username: sa
+    password:
+    hikari:
+      maximum-pool-size: 20
+      connection-timeout: 3000
+
+  # Off by default: the console can open arbitrary JDBC URLs. Enable locally with --spring.h2.console.enabled=true
+  h2:
+    console:
+      enabled: false
+      path: /h2-console
+
+  flyway:
+    locations: classpath:db/migration
+
+  jackson:
+    default-property-inclusion: non_null
+    serialization:
+      write-dates-as-timestamps: false
+
+  mvc:
+    throw-exception-if-no-handler-found: true
+  web:
+    resources:
+      add-mappings: false
+    # API messages are always English, whatever the server's OS locale (otherwise validation messages
+    # would switch language depending on the machine the service runs on)
+    locale: en
+    locale-resolver: fixed
+
+mybatis:
+  mapper-locations: classpath:mapper/*.xml
+  configuration:
+    map-underscore-to-camel-case: true
+    default-statement-timeout: 10
+
+management:
+  endpoints:
+    web:
+      exposure:
+        # metrics are recorded via Micrometer but not served over public HTTP (they reveal internals);
+        # a real deployment exports them to the monitoring backend instead
+        include: health,info
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.example.elibrary
+
+elibrary:
+  loan:
+    period: 14d
+    max-active-loans: 5
+  # per-user token bucket on borrow / return: 5 requests back to back, then 1 per second
+  rate-limit:
+    enabled: true
+    capacity: 5
+    refill-per-second: 1
