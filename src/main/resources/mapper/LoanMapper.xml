@@ -7,22 +7,23 @@
         b.format AS book_format, b.title AS book_title, b.author AS book_author, b.issue AS book_issue
     </sql>
 
-    <!-- active_flag = 1 makes the row take part in uk_loan_active (one active loan per user and book) -->
+    <!-- active_key = 0 for every active loan, so uk_loan_active allows one active loan per user and book -->
     <insert id="insert" useGeneratedKeys="true" keyProperty="id" keyColumn="id">
-        INSERT INTO loan (user_id, book_id, status, borrowed_at, due_at, active_flag)
-        VALUES (#{userId}, #{bookId}, #{status}, #{borrowedAt}, #{dueAt}, 1)
+        INSERT INTO loan (user_id, book_id, status, borrowed_at, due_at, active_key)
+        VALUES (#{userId}, #{bookId}, #{status}, #{borrowedAt}, #{dueAt}, 0)
     </insert>
 
     <select id="existsActive" resultType="boolean">
         SELECT EXISTS(SELECT 1 FROM loan WHERE user_id = #{userId} AND book_id = #{bookId} AND status = 'ACTIVE')
     </select>
 
-    <!-- user_id in the WHERE clause is the ownership check; status makes the update idempotent -->
+    <!-- user_id in the WHERE clause is the ownership check; status makes the update idempotent.
+         active_key = id moves the row out of the "active" slot (0), so the same book can be borrowed again. -->
     <update id="markReturned">
         UPDATE loan
         SET status      = 'RETURNED',
             returned_at = #{now},
-            active_flag = NULL
+            active_key  = id
         WHERE id = #{loanId}
           AND user_id = #{userId}
           AND status = 'ACTIVE'

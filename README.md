@@ -164,7 +164,7 @@ com.example.elibrary
 | 风险 | 防护措施 |
 |---|---|
 | 两位读者同时借走最后一份 | `UPDATE book SET available_copies = available_copies - 1 WHERE id = ? AND available_copies > 0`。检查和扣减在一条语句中原子完成；更新 0 行即表示已借完。 |
-| 同一位读者并发重复借同一本 | 唯一索引 `(user_id, book_id, active_flag)`。借阅中时 `active_flag` 为 1，归还后为 NULL。唯一索引允许多个 NULL，所以完整的借阅历史得以保留。 |
+| 同一位读者并发重复借同一本 | 唯一索引 `(user_id, book_id, active_key)`。借阅中的记录 `active_key` 都是 0，所以同一读者同一本书只能有一条；归还时把 `active_key` 改成这条借阅自己的 id，各不相同，所以完整的借阅历史得以保留。字段不可为空，不依赖 NULL 的特殊语义，各种数据库通用。 |
 | 同一位读者并发借多本不同的书，突破上限 | `UPDATE user_loan_quota SET active_count = active_count + 1 WHERE user_id = ? AND active_count < max`。如果"先数再判断"，两个请求都会通过。 |
 | 重复归还，或重试还书请求 | `UPDATE loan ... WHERE id = ? AND user_id = ? AND status = 'ACTIVE'`。第二次请求不会改变任何数据；`user_id` 条件同时起到归属校验的作用。 |
 | 中途某一步失败 | 每个用例在一个事务中执行，任何一步失败都会回滚之前的所有修改（份数、配额）。 |

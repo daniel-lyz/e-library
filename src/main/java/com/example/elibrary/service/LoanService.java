@@ -33,7 +33,8 @@ import java.util.stream.Collectors;
  * <ul>
  *   <li>copies: {@code UPDATE book ... WHERE available_copies > 0} (no over-lending);</li>
  *   <li>loan limit: {@code UPDATE user_loan_quota ... WHERE active_count < max};</li>
- *   <li>duplicate loans: unique index {@code (user_id, book_id, active_flag)};</li>
+ *   <li>duplicate loans: unique index {@code (user_id, book_id, active_key)}, where active loans have
+ *       {@code active_key = 0} and returned ones carry their own id;</li>
  *   <li>double return: {@code UPDATE loan ... WHERE status = 'ACTIVE'}.</li>
  * </ul>
  * Each use case runs in one transaction, so a failure at any step rolls back the earlier ones.

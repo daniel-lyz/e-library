@@ -95,18 +95,19 @@ CREATE INDEX idx_book_status_created ON book (status, created_at);
 -- -----------------------------------------------------------------------------------------------------
 -- loan：借阅记录，用户每借一次就是一行。
 --
--- 借书时插入一行（status = ACTIVE，active_flag = 1）；还书时更新这一行（status = RETURNED，
--- 写入 returned_at，active_flag 置为 NULL）。记录永不删除，因此这张表同时也是借阅历史。
+-- 借书时插入一行（status = ACTIVE，active_key = 0）；还书时更新这一行（status = RETURNED，
+-- 写入 returned_at，active_key 改为这条借阅自己的 id）。记录永不删除，因此这张表同时也是借阅历史。
 --
 -- "逾期"不存储：读取时实时计算（status = ACTIVE 且 当前时间 > due_at），
 -- 因此永远准确，也不需要定时任务去改状态。
 --
--- 为什么需要 active_flag：规则是"同一个人同一本书同时只能借一次，还了可以再借，并且保留历史"。
--- 唯一索引 uk_loan_active (user_id, book_id, active_flag) 正好实现了这个规则：
---   * 借阅中的记录 active_flag = 1，所以同一用户、同一条目只能有一条借阅中的记录；
---   * 已归还的记录 active_flag = NULL，而唯一索引允许任意多个 NULL，所以历史借阅互不冲突。
+-- 为什么需要 active_key：规则是"同一个人同一本书同时只能借一次，还了可以再借，并且保留历史"。
+-- 唯一索引 uk_loan_active (user_id, book_id, active_key) 正好实现了这个规则：
+--   * 借阅中的记录 active_key 都是 0，所以同一用户、同一条目只能有一条借阅中的记录；
+--   * 归还后 active_key 变成这条借阅自己的 id，各不相同，所以历史借阅互不冲突。
 -- 即使两个相同的借书请求同时到达，也由数据库保证只有一个能插入成功。
--- 示例（用户 1001，条目 1）：id 1 RETURNED active_flag NULL  |  id 2 ACTIVE active_flag 1  -> 两行可以共存
+-- （即常见的"逻辑删除 + 唯一索引"写法：字段不可为空，不依赖 NULL 的特殊语义，各种数据库通用。）
+-- 示例（用户 1001，条目 1）：id 1 RETURNED active_key 1  |  id 2 ACTIVE active_key 0  -> 两行可以共存
 -- -----------------------------------------------------------------------------------------------------
 CREATE TABLE loan
 (
@@ -124,11 +125,11 @@ CREATE TABLE loan
         COMMENT '到期时间 = 借出时间 + 借期（默认 14 天）。借书时就算好存下，以后修改借期配置不影响已借出的书。',
     returned_at DATETIME(3) NULL
         COMMENT '归还时间。借阅中为空。',
-    active_flag TINYINT     NULL
-        COMMENT '借阅中为 1，归还后为 NULL。唯一用途是配合唯一索引 uk_loan_active：同一用户同一条目最多一条借阅中的记录，历史记录不限条数。',
+    active_key  BIGINT      NOT NULL DEFAULT 0
+        COMMENT '借阅中为 0，归还后为这条借阅自己的 id。唯一用途是配合唯一索引 uk_loan_active：同一用户同一条目最多一条借阅中的记录，历史记录不限条数。',
     PRIMARY KEY (id),
     -- 同一用户、同一条目最多只有一条借阅中的记录（原理见上方说明）
-    CONSTRAINT uk_loan_active UNIQUE (user_id, book_id, active_flag),
+    CONSTRAINT uk_loan_active UNIQUE (user_id, book_id, active_key),
     -- 借阅记录不可能指向不存在的条目
     CONSTRAINT fk_loan_book FOREIGN KEY (book_id) REFERENCES book (id),
     CONSTRAINT ck_loan_status CHECK (status IN ('ACTIVE', 'RETURNED'))
